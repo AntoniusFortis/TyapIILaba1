@@ -5,108 +5,116 @@ using System.Threading;
 
 namespace GloryToSfedu
 {
+    // Класс, содержащий инфу для changepixel
+    class ProccessInfo
+    {
+        // Текущие коордианты по X и Y
+        public volatile int X;
+        public volatile int Y;
+        // Кол-во запущенных потоков
+        public volatile int ThreadsRunning;
+
+        // Максимальная высота и ширина изображения 
+        public int Height;
+        public int Width;
+        // Кол-во пикселей, над которыми колдует каждый поток
+        public int PixelAmount;
+
+        // Списки пикселей обоих изображений 
+        public List<Color> FirstListColors;
+        public List<Color> SecListColors;
+        // Флаг для одновременного старта работы потоков (хотя бы с точки зрения кода)
+        public ManualResetEvent SimultaneousLaunch = new ManualResetEvent(false);
+        // Флаг для на ожидание выполнения работы всех потоков
+        public ManualResetEvent WaitAll = new ManualResetEvent(false);
+
+        // Финальное изображение
+        public Bitmap ResultBitmap;
+    }
+
     class Proccess
     {
         // Затраченное время
-        public long SpentTime { get; set; } = 0;
-
-        // Затраченное время
-        private Bitmap sourceBitmap;
-        // Изображение в которое заносится результат работы потоков
-        private static Bitmap victimBitmap;
-        // Координаты текущего пикселя
-        private static volatile int currentY = 0, currentX = 0;
-        // Кол-во пикселей по высоте и ширине 
-        private static int maxHeight, maxWidth;
-        // Счетчик завершенных потоков
-        private static volatile int stoppedthreads = 0;
-        // Список пикселей изображений
-        private static List<Color> sourceColors, khashColors;
-        // Флаг для одновременного запуска работы потоков
-        private static ManualResetEvent simultaneousLaunch = new ManualResetEvent(false);
-        // Объект измерения времени
-        // (он тут для того, чтобы не создавать его в коде каждый раз)
-        private Stopwatch stopwatcher = new Stopwatch();
-
-        public Proccess(Bitmap bmp1, Bitmap bmp2)
-        {
-            maxHeight = bmp1.Height;
-            maxWidth = bmp1.Width;
-
-            sourceColors = new List<Color>(maxHeight * maxWidth);
-            khashColors = new List<Color>(maxHeight * maxWidth);
-
-            // Заполняем списки цветов
-            int y, x;
-            for (y = 0; y < maxHeight; ++y)
-            {
-                for (x = 0; x < maxWidth; ++x)
-                {
-                    sourceColors.Add(bmp1.GetPixel(x, y));
-                    khashColors.Add(bmp2.GetPixel(x, y));
-                }
-            }
-
-            sourceBitmap = bmp1;
-        }
+        public long SpentTime { get; set; }
 
         // Метод эксперимента
-        public void Experiment(int threadscount)
+        public Bitmap Experiment(int threadscount, int maxheight, int maxwidth, ref List<Color> firstlist, ref List<Color> secondlist)
         {
             int i;
 
-            victimBitmap = new Bitmap(sourceBitmap);
-
-            // Пихаем объекты потока в массив (чтобы затраченное время на их создания не учитывались)
+            // Пихаем объекты потока в массив (чтобы затраченное время на их создание не учитывались)
             var threads = new Thread[threadscount];
             for (i = 0; i < threadscount; ++i)
             {
                 threads[i] = new Thread(ChangePixel);
             }
-
+            
             // Получаем число пикселей для каждого потока
-            int pixels = getAvailPixels(threadscount);
+            int pixels = maxheight * maxwidth / threadscount;
 
+            // Создаём структуру с инфой для changepixel
+            var procinfo = new ProccessInfo
+            {
+                Height = maxheight,
+                Width = maxwidth,
+                ThreadsRunning = threadscount,
+                PixelAmount = pixels,
+                FirstListColors = firstlist,
+                SecListColors = secondlist,
+                ResultBitmap = new Bitmap(maxwidth, maxheight)
+            };
+
+            // Объект измерения времени
+            var stopwatcher = new Stopwatch();
             // Запусакем счётчик и потоки
             stopwatcher.Start();
             for (i = 0; i < threadscount; ++i)
             {
-                threads[i].Start(pixels);
+                threads[i].Start(procinfo);
             }
 
             // Ставим в true флаг, который задерживает выполнение потоков, чтобы они запустились одновременно
-            simultaneousLaunch.Set();
-            
+            procinfo.SimultaneousLaunch.Set();
+
             // Ждём, пока не завершатся запущенные потоки
-            while (stoppedthreads < threadscount)
-                Thread.Sleep(1);
+            procinfo.WaitAll.WaitOne();
 
             // Останавливаем счётчик и собираем инфу
             stopwatcher.Stop();
+
+            // Закидываем затраченное время в переменную, из которой потом будет получено avg значение
             SpentTime += stopwatcher.ElapsedMilliseconds;
 
-            // Обнуляем все счётчики и флаги
-            stopwatcher.Reset();
-            simultaneousLaunch.Reset();
-            stoppedthreads = 0;
-            currentX = 0;
-            currentY = 0;
+            // Возвращаем изменённую пикчу
+            return procinfo.ResultBitmap;
         }
 
         // Метод изменения пикселей
-        private static void ChangePixel(object info)
+        private static void ChangePixel(object obj)
         {
+            var info = (ProccessInfo)obj;
+
             // Ждём пока не дадут разрешения начать работу
-            simultaneousLaunch.WaitOne();
-            // Получаем кол-во пикселей на изменение данным потоком
-            int avail_pixels = (int)info;
+            info.SimultaneousLaunch.WaitOne();
 
-            while (avail_pixels > 0 && currentY < maxHeight)
+            var availPixels = info.PixelAmount;
+
+            ref int currentX = ref info.X;
+            ref int currentY = ref info.Y;
+            ref int threadsamount = ref info.ThreadsRunning;
+
+            int maxheight = info.Height;
+            int maxwidth = info.Width;
+
+            var firstlist = info.FirstListColors;
+            var seclist = info.SecListColors;
+
+            while (availPixels > 0 && currentY < maxheight)
             {
-                int index = maxWidth * currentY + currentX;
+                int index = maxwidth * currentY + currentX;
 
-                var clrpixel1 = khashColors[index];
-                var clrpixel2 = sourceColors[index];
+                var clrpixel1 = firstlist[index];
+                var clrpixel2 = seclist[index];
                 // Анонимный readonly тип, в который вбиваем argb палитру пикселей обоих изображений
                 // и колдуем над ними
                 var newcolor = new
@@ -121,35 +129,29 @@ namespace GloryToSfedu
                 var newColor = Color.FromArgb(newcolor.Alpha, newcolor.Red, newcolor.Green, newcolor.Blue);
 
                 // Меняем цвет пикселя
-                lock (victimBitmap)
-                    victimBitmap.SetPixel(currentX, currentY, newColor);
+                lock (info.ResultBitmap)
+                    info.ResultBitmap.SetPixel(currentX, currentY, newColor);
 
                 // Проверки на превышении ширины
-                if (currentX >= maxWidth - 1)
+                if (currentX >= maxwidth - 1)
                 {
-                    ++currentY;
-                    currentX = 0;
+                    Interlocked.Increment(ref currentY);
+                    Interlocked.Exchange(ref currentX, 0);
                 }
                 else
                 {
-                    ++currentX;
+                    Interlocked.Increment(ref currentX);
                 }
-                --avail_pixels;
+                --availPixels;
                 Thread.Sleep(0);
             }
-            ++stoppedthreads;
-        }
+            Interlocked.Decrement(ref threadsamount);
 
-        // Метод получения кол-во пикселей
-        private int getAvailPixels(int threadscount)
-        {
-            return maxHeight * maxWidth / threadscount;
-        }
-
-        // Метод передачи victimBitmap во вне
-        public Bitmap GetVictim()
-        {
-            return victimBitmap;
+            // Если мы последний поток, говорим, что все потоки выполнились
+            if (threadsamount == 0)
+            {
+                info.WaitAll.Set();
+            }
         }
     }
 }
