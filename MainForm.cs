@@ -40,7 +40,25 @@ namespace GloryToSfedu
                 }
             }
         }
+
+
+        private void Btns_Enable(bool value)
+        {
+            ClearBtn.Enabled = value;
+            StartBtn.Enabled = value;
+        }
+
         private void StartBtn_Click(object sender, EventArgs e)
+        {
+            Btns_Enable(false);
+
+            for (int i=0; i<=ThreadsNumeric.Value; i++)
+                StartAction((int)Math.Pow(2.0, i));
+
+            Btns_Enable(true);
+        }
+
+        void StartAction(int num)
         {
             // Фигачим массивы пикселей для двух изображений
             SetListColors(_firstBitmap, (Bitmap)KhashcovskyPictureBox.BackgroundImage, out var sourceColors, out var khashColors);
@@ -48,39 +66,38 @@ namespace GloryToSfedu
             var proc = new Proccess();
 
             // Кол-во потоков
-            int threadscount = (int)ThreadsNumeric.Value; 
+            //int threadscount = (int)ThreadsNumeric.Value;
+            int threadscount = num;
+
             // Кол-во повторений эксперимента
             int maxtry = (int)TriesNumeric.Value;
 
-            int i;
+            // Заполняем структуру с инфой
+            var ci = new ChangerInfo(new Bitmap(_firstBitmap.Width, _firstBitmap.Height), threadscount, ref sourceColors, ref khashColors);
+
             // Фигачим эксперимент по кол-во его повторений
-            for (i = 0; i < maxtry; ++i)
+            for (int i = 0; i < maxtry; ++i)
             {
                 // Возвращаем исходную пикчу
                 VictimPictureBox.BackgroundImage = _firstBitmap;
                 // Получаем изменённую пикчу и выводим её
-                var newpic = proc.Experiment(threadscount, _firstBitmap.Height, _firstBitmap.Width, ref sourceColors, ref khashColors);
+                var newpic = proc.Experiment(ci);
                 VictimPictureBox.BackgroundImage = newpic;
             }
 
             // Работаем с графиком
-            double x = (double) ThreadsNumeric.Value;
             double y = proc.SpentTime / maxtry;
 
             var series = ResultChart.Series[0];
-            for (i = 0; i < series.Points.Count; ++i)
-            {
+            for (int i = 0; i < series.Points.Count; ++i)
                 if (series.Points[i].XValue == threadscount)
                 {
                     series.Points.RemoveAt(i);
                     break;
                 }
-            }
-            series.Points.AddXY(x, y);
-            ResultTextBox.Text += $@"{x} threads ended in {y} ms.{Environment.NewLine}";
 
-            // Заставим garbage collector принудительно убрать мусор (ну, на всякий случай)
-            GC.Collect();
+            series.Points.AddXY(threadscount, y);
+            ResultTextBox.Text += $@"{threadscount} threads ended in {y} ms.{Environment.NewLine}";
         }
     }
 }

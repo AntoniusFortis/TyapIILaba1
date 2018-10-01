@@ -3,3 +3,11 @@
 ################################################################################
 
 /Resources
+/Properties
+/Program.cs
+/obj/Debug
+/GloryToSfedu.csproj
+/bin/Debug
+/App.config
+/obj/Release
+/bin/Release
