@@ -8,32 +8,30 @@ namespace GloryToSfedu
     {
         private static Changer _instance;
 
-        public Changer(ChangerInfo changerinfo)
+        private Changer(ChangerInfo changerinfo)
         {
-            ResultBitmap = changerinfo.Picture;
-            _threadsRunning = changerinfo.ThreadsAmount;
-            _firstListColors = changerinfo.FirstList;
-            _secListColors = changerinfo.SecondList;
-            _width = ResultBitmap.Width;
-            SimultaneousLaunch = new ManualResetEvent(false);
-            WaitAll = new ManualResetEvent(false);
+            LoadInfo(changerinfo);
         }
 
         public static Changer GetInstance(ChangerInfo changerinfo)
         {
-            _instance = new Changer(changerinfo);
+            if (_instance == null)
+                _instance = new Changer(changerinfo);
+            else
+                _instance.LoadInfo(changerinfo);
+
             return _instance;
         }
 
         // Списки пикселей обоих изображений 
-        private readonly ColorList _firstListColors;
-        private readonly ColorList _secListColors;
+        private ColorList _firstListColors;
+        private ColorList _secListColors;
 
         // Максимальная ширина изображения 
-        private readonly int _width;
+        private int _width;
 
         // Кол-во запущенных потоков
-        private /*volatile*/ int _threadsRunning;
+        private int _threadsRunning;
 
         // Флаг для одновременного старта работы потоков (хотя бы с точки зрения кода)
         public ManualResetEvent SimultaneousLaunch;
@@ -41,7 +39,18 @@ namespace GloryToSfedu
         public ManualResetEvent WaitAll;
 
         // Финальное изображение
-        public Bitmap ResultBitmap { get; }
+        public Bitmap ResultBitmap { get; private set; }
+
+        private void LoadInfo(ChangerInfo changerInfo)
+        {
+            ResultBitmap = changerInfo.Picture;
+            _threadsRunning = changerInfo.ThreadsAmount;
+            _firstListColors = changerInfo.FirstList;
+            _secListColors = changerInfo.SecondList;
+            _width = ResultBitmap.Width;
+            SimultaneousLaunch = new ManualResetEvent(false);
+            WaitAll = new ManualResetEvent(false);
+        }
 
         // Метод изменения пикселей
         public static void ChangePixel(object obj)
@@ -50,7 +59,6 @@ namespace GloryToSfedu
 
             // Ждём пока не дадут разрешения начать работу
             _instance.SimultaneousLaunch.WaitOne();
-
 
             for (int i = info.StartY; i < info.EndY; ++i)
             {

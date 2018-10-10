@@ -58,7 +58,7 @@ namespace GloryToSfedu
             Btns_Enable(true);
         }
 
-        void StartAction(int num)
+        private void StartAction(int num)
         {
             // Фигачим массивы пикселей для двух изображений
             SetListColors(_firstBitmap, (Bitmap)KhashcovskyPictureBox.BackgroundImage, out var sourceColors, out var khashColors);
@@ -66,7 +66,6 @@ namespace GloryToSfedu
             var proc = new Proccess();
 
             // Кол-во потоков
-            //int threadscount = (int)ThreadsNumeric.Value;
             int threadscount = num;
 
             // Кол-во повторений эксперимента
